@@ -60,12 +60,22 @@ def get_class_map(data_type):
             'no object': 6
         }
     elif data_type == 'detection':
-        class_map = {'table': 0, 'table rotated': 1, 'no object': 2}
+        class_map = {
+            'full_lined': 0,
+            'partial_lined_merged_cells': 1,
+            'nolines': 2,
+            'partial_lined': 3,
+            'merged_cells': 4,
+            'no object':  5
+        }
     return class_map
 
 detection_class_thresholds = {
-    "table": 0.5,
-    "table rotated": 0.5,
+    'full_lined': 0.5,
+    'partial_lined_merged_cells': 0.5,
+    'nolines': 0.5,
+    'partial_lined': 0.5,
+    'merged_cells': 0.5,
     "no object": 10
 }
 
