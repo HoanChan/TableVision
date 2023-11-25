@@ -1,5 +1,5 @@
 {
-    "data_root_dir": "/content/TNCR",
+    "data_root_dir": "/content/Datasets/TNCR",
     "config_file": "config.yaml",
     "backbone": "resnet18",
     "data_type": "detection",
