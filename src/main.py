@@ -12,7 +12,11 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-sys.path.append("../detr")
+# sys.path.append("../detr")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+detr_dir = os.path.join(current_dir, '..', 'detr')
+sys.path.append(detr_dir)
+
 from engine import evaluate, train_one_epoch
 from models import build_model
 import util.misc as utils
@@ -345,13 +349,14 @@ def train(args, model, criterion, postprocessors, device):
     print('Total training time: ', datetime.now() - start_time)
 
 
-def main():
-    cmd_args = get_args().__dict__
-    config_args = json.load(open(cmd_args['config_file'], 'rb'))
-    for key, value in cmd_args.items():
-        if not key in config_args or not value is None:
-            config_args[key] = value
-    #config_args.update(cmd_args)
+def main(config_args = None):
+    if not config_args:
+      cmd_args = get_args().__dict__
+      config_args = json.load(open(cmd_args['config_file'], 'rb'))
+      for key, value in cmd_args.items():
+          if not key in config_args or not value is None:
+              config_args[key] = value
+      #config_args.update(cmd_args)
     args = type('Args', (object,), config_args)
     print(args.__dict__)
     print('-' * 100)
