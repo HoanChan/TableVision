@@ -92,7 +92,14 @@ def get_class_map(data_type):
             'no object': 6
         }
     else:
-        class_map = {'table': 0, 'table rotated': 1, 'no object': 2}
+        class_map = {
+            'full_lined': 0,
+            'partial_lined_merged_cells': 1,
+            'nolines': 2,
+            'partial_lined': 3,
+            'merged_cells': 4,
+            'no object':  5
+        }
     return class_map
 
 
@@ -314,15 +321,15 @@ def train(args, model, criterion, postprocessors, device):
 
         lr_scheduler.step()
 
-        pubmed_stats, coco_evaluator = evaluate(model, criterion,
-                                                postprocessors,
-                                                data_loader_val, dataset_val,
-                                                device, None)
-        print("pubmed: AP50: {:.3f}, AP75: {:.3f}, AP: {:.3f}, AR: {:.3f}".
-              format(pubmed_stats['coco_eval_bbox'][1],
-                     pubmed_stats['coco_eval_bbox'][2],
-                     pubmed_stats['coco_eval_bbox'][0],
-                     pubmed_stats['coco_eval_bbox'][8]))
+        # pubmed_stats, coco_evaluator = evaluate(model, criterion,
+        #                                         postprocessors,
+        #                                         data_loader_val, dataset_val,
+        #                                         device, None)
+        # print("pubmed: AP50: {:.3f}, AP75: {:.3f}, AP: {:.3f}, AR: {:.3f}".
+        #       format(pubmed_stats['coco_eval_bbox'][1],
+        #              pubmed_stats['coco_eval_bbox'][2],
+        #              pubmed_stats['coco_eval_bbox'][0],
+        #              pubmed_stats['coco_eval_bbox'][8]))
 
         # Save current model training progress
         torch.save({'epoch': epoch,
