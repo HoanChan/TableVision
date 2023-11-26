@@ -22,6 +22,7 @@ from models import build_model
 import util.misc as utils
 import datasets.transforms as R
 
+from inference import get_class_map
 import table_datasets as TD
 from table_datasets import PDFTablesDataset
 from eval import eval_coco
@@ -82,30 +83,6 @@ def get_transform(data_type, image_set):
         return TD.get_structure_transform(image_set)
     else:
         return TD.get_detection_transform(image_set)
-
-
-def get_class_map(data_type):
-    if data_type == 'structure':
-        class_map = {
-            'table': 0,
-            'table column': 1,
-            'table row': 2,
-            'table column header': 3,
-            'table projected row header': 4,
-            'table spanning cell': 5,
-            'no object': 6
-        }
-    else:
-        class_map = {
-            'full_lined': 0,
-            'partial_lined_merged_cells': 1,
-            'nolines': 2,
-            'partial_lined': 3,
-            'merged_cells': 4,
-            'no object':  5
-        }
-    return class_map
-
 
 def get_data(args):
     """
