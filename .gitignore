@@ -1,3 +1,4 @@
 /Datasets
 models/pubtables1m_detection_detr_r18.pth
 models/pubtables1m_structure_detr_r18.pth
+__pycache__
