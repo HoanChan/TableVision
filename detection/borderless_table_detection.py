@@ -1,6 +1,17 @@
-from ..utils.bbox import *
-from ..utils.cv import *
-from ..utils.math import *
+import os
+import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+utils_dir = os.path.join(current_dir, '..', 'utils')
+if utils_dir not in sys.path:
+    sys.path.append(utils_dir)
+
+from utils.bbox import *
+from utils.cv import *
+from utils.math import *
+from utils.ocr import detectText
+from utils.table import cells_to_html, createHTML
+from detection.border_table_detection import find_Lines
 
 def explain_bboxs_by_width(bboxs, image, row_threshold = 20):
     width, height = image.shape[:2]
@@ -278,3 +289,34 @@ def createCell_img(cells, image):
         
         cells_imgs += [(cropped_image, cell['bbox'])]
     return cells_imgs
+
+def recognize(image_path, detector): 
+    image = cv2.imread(image_path)
+    # resize về width = 1000
+    # scale_percent = 1000 / image.shape[1]
+    # width = int(image.shape[1] * scale_percent)
+    # height = int(image.shape[0] * scale_percent)
+    # image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
+    image_deskew, calc_angle = deskew_image(image)
+    image_ok = trim_white(image_deskew)
+    mask, dots, outImag = find_Lines(image_ok)
+    image_removed = remove_regions(image_ok, mask)
+    bboxs, mask, outImag = find_Cells(image_removed)
+    boxs = bboxs
+    cols = split_box_rows_columns(boxs, mode = 'col')       
+    rows = split_box_rows_columns(boxs, mode = 'row')
+    box_indexs = [getbox_index(box, rows, cols) for box in boxs]
+    boxs, rows, cols, box_indexs = add_missing_cells(boxs, rows, cols, box_indexs)
+    matrix = createSpanMatrix(rows, cols, box_indexs, bboxs)
+    cells = createCells(boxs, box_indexs, matrix)
+    cells_imgs = createCell_img(cells, image_removed)
+    texts = []
+    for cell in cells_imgs:
+      img, bbox = cell
+      text, lines = detectText(img, detector)
+      texts += [text]
+    for i in range(len(cells)):
+      cells[i]['cell text'] =  texts[i]
+    html = cells_to_html(cells).replace('<thead>','<tr>').replace('</thead>','</tr>').replace('\n',"<br>")
+    new_html = createHTML(image_path, html)
+    return new_html

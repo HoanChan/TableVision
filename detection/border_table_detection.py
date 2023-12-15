@@ -1,4 +1,3 @@
-
 import os
 import sys
 import cv2
@@ -34,7 +33,7 @@ def detect_lines(img_bin, fixkernel, detectkernel):
     result = cv2.dilate(image_1, detectkernel, iterations=4)
     return result
 
-def recognize_structure(img):
+def find_Lines(img):
     """
     Nhận diện cấu trúc bảng trong ảnh.
 
@@ -183,7 +182,7 @@ def draw_cells(img, cells):
 def recognize(image_path, detector):
     image = cv2.imread(image_path)
     image_ok, calc_angle = deskew_image(image)
-    mask, dots, outImag = recognize_structure(image_ok)
+    mask, dots, outImag = find_Lines(image_ok)
     image_removed = remove_regions(image_ok, mask)
     centers = findCenters(dots)
     rows = split_rows_columns(centers, mode='row')
