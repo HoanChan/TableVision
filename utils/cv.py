@@ -149,16 +149,16 @@ def remove_regions(image, mask):
     masked_image[mask != 0] = [255, 255, 255]
     return masked_image
 
-def draw_text_in_center(img, text, box):
+def draw_text_in_center(img, text, box, size = 0.7, color = (0, 0, 255)):
     x1, y1, x2, y2 = box
 
     center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
-    text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 1)
+    text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, size, 1)
     text_width = text_size[0]
     text_height = text_size[1]
     text_origin = (center[0] - text_width // 2, center[1] + text_height // 2)
 
-    cv2.putText(img, text, text_origin, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1, cv2.LINE_AA)
+    cv2.putText(img, text, text_origin, cv2.FONT_HERSHEY_SIMPLEX, size, color, 1, cv2.LINE_AA)
 
 def draw_bboxs(image, bboxs, texts = lambda x: str(x)):    
     img_width = image.shape[1]

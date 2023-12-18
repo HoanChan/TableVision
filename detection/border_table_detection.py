@@ -169,12 +169,12 @@ def create_cells(rows, columns):
     return cells
 
 
-def draw_cells(img, cells):
+def draw_cells(img, cells, size = 0.7, color = (0, 0, 255)):
     img = img.copy()
     for index, cell in enumerate(cells, start=1):
         x1, y1, x2, y2 = cell['bbox']
         cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 1)
-        draw_text_in_center(img, f"{cell['row_span']}x{cell['col_span']}", cell['bbox'])
+        draw_text_in_center(img, f"{cell['row_span']}x{cell['col_span']}", cell['bbox'], size, color)
         # cv2.circle(img, center, 5, (255, 0, 255), -1)
     return img
 
