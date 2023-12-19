@@ -4,7 +4,7 @@
         "cpus": 4
     },
     "waitFor": "onCreateCommand",
-    "updateContentCommand": "./setup.sh",
+    "updateContentCommand": "python3 -m pip install -r requirements.txt && sudo apt-get update -y && sudo apt-get install libgl1 -y",
     "postCreateCommand": "",
     "customizations": {
         "codespaces": {
@@ -16,5 +16,10 @@
                 "ms-python.python"
             ]
         }
+    },
+    "features": {
+      "ghcr.io/devcontainers/features/nvidia-cuda:1": {
+        "installCudnn": true
+      }
     }
 }
