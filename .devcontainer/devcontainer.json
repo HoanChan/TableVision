@@ -13,13 +13,16 @@
         "vscode": {
             "extensions": [
                 "ms-toolsai.jupyter",
-                "ms-python.python"
+                "ms-python.python",
+                "github.copilot"
             ]
         }
     },
     "features": {
       "ghcr.io/devcontainers/features/nvidia-cuda:1": {
         "installCudnn": true
+        // "cudaVersion": "12.1",
+        // "cudnnVersion": "8.9.5.29"
       }
     }
 }
