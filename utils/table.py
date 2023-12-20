@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import base64
 
 def cells_to_html(cells):
 
@@ -28,7 +29,12 @@ def cells_to_html(cells):
 
     return str(ET.tostring(table, encoding="unicode", short_empty_elements=False))
 
-def createHTML(image_path, html, show_image = True):
+def image_to_base64(image_path):
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+    return encoded_string
+
+def createHTML(image_path, html, show_image = True, useBase64 = False):
     css = """
     table {
     border-collapse: collapse;
@@ -56,10 +62,13 @@ def createHTML(image_path, html, show_image = True):
     border: 1px solid rgba(68, 68, 68, 0.5);
     }
     """
+    image_tag = """<img src='""" + image_path + """' alt="Ảnh link" style="width: 90%;">"""
+    if useBase64:
+      image_tag = '<img src="data:image/jpeg;base64,' + image_to_base64(image_path) + '" alt="Ảnh Base64" style="width: 90%;">'
     body = """
     <div style="display: flex;">
     <div style="flex: 1;">
-        <img src='""" + image_path + """' alt="Ảnh" style="width: 90%;">
+    """ + image_tag + """
     </div>
     <div style="flex: 1;">""" + html + """</div>
     </div>
