@@ -179,7 +179,7 @@ def draw_cells(img, cells, size = 0.7, color = (0, 0, 255)):
     return img
 
 
-def recognize(image_path, detector):
+def recognize(image_path, detector, useBase64=False):
     image = cv2.imread(image_path)
     image_ok, calc_angle = deskew_image(image)
     mask, dots, outImag = find_Lines(image_ok)
@@ -203,5 +203,5 @@ def recognize(image_path, detector):
     for i in range(len(cells)):
         cells[i]['cell text'] = texts[i]
     html = cells_to_html(cells).replace('<thead>','<tr>').replace('</thead>','</tr>').replace('\n',"<br>")
-    new_html = createHTML(image_path, html)
+    new_html = createHTML(image_path, html, show_image=True, useBase64=useBase64)
     return new_html
