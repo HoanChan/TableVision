@@ -2,13 +2,14 @@ import os
 import sys
 import cv2
 import numpy as np
+from sympy import im
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 utils_dir = os.path.join(current_dir, '..', 'utils')
 if utils_dir not in sys.path:
     sys.path.append(utils_dir)
 
-from utils.cv import deskew_image, draw_text_in_center, remove_regions
+from utils.cv import deskew_image, draw_text_in_center, remove_regions, preProcessing
 from utils.ocr import detectText
 from utils.point import split_rows_columns
 from utils.table import cells_to_html, createHTML
@@ -30,7 +31,7 @@ def detect_lines(img_bin, fixkernel, detectkernel):
     """
     image_0 = cv2.dilate(img_bin, fixkernel, iterations=2)
     image_1 = cv2.erode(image_0, detectkernel, iterations=3)
-    result = cv2.dilate(image_1, detectkernel, iterations=4)
+    result = cv2.dilate(image_1, detectkernel, iterations=3)
     return result
 
 def find_Lines(img):
@@ -181,6 +182,7 @@ def draw_cells(img, cells, size = 0.7, color = (0, 0, 255)):
 
 def recognize(image_path, detector, useBase64=False):
     image = cv2.imread(image_path)
+    _, image = preProcessing(image)
     image_ok, calc_angle = deskew_image(image)
     mask, dots, outImag = find_Lines(image_ok)
     image_removed = remove_regions(image_ok, mask)

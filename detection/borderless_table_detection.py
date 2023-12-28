@@ -292,6 +292,7 @@ def createCell_img(cells, image):
 
 def recognize(image_path, detector, useBase64=False): 
     image = cv2.imread(image_path)
+    _, image = preProcessing(image)
     # resize về width = 1000
     # scale_percent = 1000 / image.shape[1]
     # width = int(image.shape[1] * scale_percent)
