@@ -138,24 +138,16 @@ def find_Cells(image):
     img_height, img_width = image.shape[:2]
     if img_height == 0 or img_width == 0:
         return [], [], image, outImag
-    # THRESH_OTSU là phương pháp tự động xác định ngưỡng dựa trên histogram của ảnh
     img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    thresh, img_bin = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-    # outImag.append((img_bin, 'invert'))
-    try:
-        img_median = cv2.medianBlur(img_bin, 11)
-    except:
-        img_median = img_bin
-    outImag.append((img_median, 'img_median'))
+    thresh, img_bin = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)# THRESH_OTSU là phương pháp tự động xác định ngưỡng dựa trên histogram của ảnh
 
-    
     # Connect letters that are connected only by a few pixels
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 1))
-    img_connect = cv2.dilate(img_median, kernel, iterations=3)
+    img_connect = cv2.dilate(img_bin, kernel, iterations=3)
     outImag.append((img_connect, 'connect_letters'))
 
     # loại bỏ nhiễu
-    img_bold = cv2.medianBlur(img_connect, 9)
+    img_bold = cv2.medianBlur(img_connect, 11)
     outImag.append((img_bold, 'medianBlur'))
 
     # Xác định các contours
@@ -164,6 +156,8 @@ def find_Cells(image):
     contours = sorted(contours, key=lambda ctr: cv2.boundingRect(ctr)[1] * img_width + cv2.boundingRect(ctr)[0]) 
 
     bboxs = [cv2.boundingRect(contour) for contour in contours]
+    # loại bỏ các bbox có chiều cao hoặc chiều rộng quá nhỏ (có thể là 1 cái đường kẻ còn sót lại)
+    bboxs = [bbox for bbox in bboxs if bbox[2] > 10 and bbox[3] > 10]
     # chuyển sang x1, y1, x2, y2
     bboxs = [(x, y, x+w, y+h) for x, y, w, h in bboxs]
     
@@ -292,17 +286,12 @@ def createCell_img(cells, image):
 
 def recognize(image_path, detector, useBase64=False): 
     image = cv2.imread(image_path)
-    _, image = preProcessing(image)
-    # resize về width = 1000
-    # scale_percent = 1000 / image.shape[1]
-    # width = int(image.shape[1] * scale_percent)
-    # height = int(image.shape[0] * scale_percent)
-    # image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
     image_deskew, calc_angle = deskew_image(image)
     image_ok = trim_white(image_deskew)
-    mask, dots, outImag = find_Lines(image_ok)
+    mask, _, _ = find_Lines(image_ok)
     image_removed = remove_regions(image_ok, mask)
-    bboxs, mask, outImag = find_Cells(image_removed)
+    _, image_pre = preProcessing(image_removed)
+    bboxs, mask, _ = find_Cells(image_pre)
     boxs = bboxs
     cols = split_box_rows_columns(boxs, mode = 'col')       
     rows = split_box_rows_columns(boxs, mode = 'row')
