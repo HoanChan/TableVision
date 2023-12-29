@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-from utils.bbox import is_bbox_inside
+from utils import bbox
+from utils.bbox import is_bbox_inside, split_box_rows_columns, create_bbox
 
 def display_images_with_labels(image_labels, layout, size=(10, 10), show_axis=True):
     """
@@ -250,28 +251,40 @@ def cut_text_line(image):
     - images: Danh sách các dòng văn bản đã cắt được.
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, bw = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+    _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
     dilated = cv2.dilate(bw, kernel, iterations=10) # mở rộng để lấp đầy hàng
     # return [dilated]
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     images = []
     # img_cnt = image.copy()
+    bboxs=[]
     for cnt in contours:
         area = cv2.contourArea(cnt)
         x, y, w, h = cv2.boundingRect(cnt)
         if area > 100 and w > h and h > 5:
-            # cv2.drawContours(img_cnt, contours, -1, (0, w%255, 0), 2)
-            cropped = image[y-3:y+h+3, x:]
-            images+=[cropped]
-    # return [img_cnt]
+            bboxs.append((x,y,x+w,y+h))
+    if len(bboxs) == 0:
+        return []
+    # Sắp xếp các bboxs theo vị trí từ trên xuống dưới, từ trái qua phải
+    bboxs = sorted(bboxs, key=lambda box: box[1] * image.shape[1] + box[0])
+    # Phân các bboxs thành các dòng
+    rows = split_box_rows_columns(bboxs, 'row')
+    for row in rows:
+        if len(row) > 1:
+            box = create_bbox(row)
+        else:
+            box = row[0]
+        x1,y1,x2,y2 = box
+        cropped = image[y1-3:y2+3, x1:x2]
+        images+=[cropped]
     if len(images) == 0:
         return []
     # Tìm độ cao lớn nhất của các ảnh
     max_height = max([img.shape[0] for img in images])
     # xoá các image có độ cao nhỏ hơn nhiều so với max_height
     images = [img for img in images if img.shape[0] > max_height / 2]
-    return images[::-1]
+    return images
 
 # vẽ các trọng tâm của bbox lên img mới
 def drawCenters(img, centers, size = 20, color = (0, 0, 255), thickness = 3):
