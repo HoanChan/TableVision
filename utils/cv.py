@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
+from utils.bbox import is_bbox_inside
 
 def display_images_with_labels(image_labels, layout, size=(10, 10), show_axis=True):
     """
@@ -38,6 +39,72 @@ def display_images_with_labels(image_labels, layout, size=(10, 10), show_axis=Tr
 
     plt.tight_layout()
     plt.show()
+
+def preProcessing(image, minRecSize = 5000):    
+    """
+    Tiền xử lý ảnh.
+    
+    Tham số:
+    - image: Ảnh cần tiền xử lý.
+    - minRecSize: Kích thước tối thiểu của vùng hình chữ nhật để được xem là vùng hình chữ nhật màu đen.
+    
+    Kết quả:
+    - data: Danh sách các tuple (ảnh, nhãn) đã tiền xử lý.
+    - result: Ảnh đã tiền xử lý.
+    """
+    data = []
+    # # resize về chiều nhỏ nhất là 1000
+    # w,h = image.shape[:2]
+    # if w < h:
+    #     scale_percent = 2000 / image.shape[0]
+    # else:
+    #     scale_percent = 2000 / image.shape[1]
+    # width = int(image.shape[1] * scale_percent)
+    # height = int(image.shape[0] * scale_percent)
+    # image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
+    data+=[(image,'original')]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    data+=[(gray,'gray')]
+    # Áp dụng ngưỡng
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    data+=[(binary,'binary')]
+    # tìm các vùng hình chữ nhật màu đen
+    contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #lọc các vùng hình chữ nhật theo kích thước 
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > minRecSize ]
+    bboxs = [cv2.boundingRect(cnt) for cnt in contours]
+    # sắp xếp các bbox theo diện tích tăng dần
+    bboxs.sort(key=lambda box: box[2]*box[3])
+    # chuyển sang x1,y1,x2,y2
+    bboxs = [(x,y,x+w,y+h) for x,y,w,h in bboxs]
+    # bỏ các bbox chứa bbox khác
+    for i,box in enumerate(bboxs):
+        for j in range(i+1,len(bboxs)):
+            if is_bbox_inside(bboxs[j],box):
+                bboxs.pop(j)
+                break
+    # đảo ngược màu sắc của các vùng hình chữ nhật
+    newbinary = binary.copy()
+    for box in bboxs:
+        x1,y1,x2,y2 = box
+        # print(cnt)
+        # lấy ra vùng hình chữ nhật trong binary
+        roi = binary[y1:y2, x1:x2]
+        # kiểm tra màu sắc chủ đạo của vùng hình chữ nhật
+        if np.mean(roi) > 128:
+            continue
+        # đảo ngược màu sắc
+        roi = cv2.bitwise_not(roi)
+        # gán lại vùng hình chữ nhật đã đảo ngược màu sắc vào binary
+        newbinary[y1:y2, x1:x2] = roi
+    # chuyển binary sang ảnh màu
+    result = cv2.cvtColor(newbinary, cv2.COLOR_GRAY2BGR)
+    # vẽ các bbox lên ảnh
+    # for box in bboxs:
+    #     x1, y1, x2, y2 = box
+    #     cv2.rectangle(result, (x1, y1), (x2, y2), (0, 255, 0), 3)
+    data+=[(result,'image')]
+    return data, result
 
 def deskew_image(image):
     """
@@ -207,11 +274,13 @@ def cut_text_line(image):
     return images[::-1]
 
 # vẽ các trọng tâm của bbox lên img mới
-def drawCenters(img, centers):
-    img = np.zeros_like(img)
-    for center in centers:
-        cv2.circle(img, center, 1, (255, 255, 255), -1)
-    return img
+def drawCenters(img, centers, size = 20, color = (0, 0, 255), thickness = 3):
+    image = np.zeros_like(img)
+    for center in centers:        
+        cv2.line(image, (center[0]-size//2, center[1]-size//2), (center[0]+size//2, center[1]+size//2), color, thickness)
+        cv2.line(image, (center[0]+size//2, center[1]-size//2), (center[0]-size//2, center[1]+size//2), color, thickness)
+        # cv2.circle(img, center, 1, (255, 255, 255), -1)
+    return image
 
 # Vẽ các hàng và cột lên ảnh dựa vào điểm đầu và điểm cuối của mỗi hàng/cột
 def draw_rows_columns(img, rows, columns):

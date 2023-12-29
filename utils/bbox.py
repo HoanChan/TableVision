@@ -1,5 +1,5 @@
 import numpy as np
-from point import split_rows_columns
+from utils.point import split_rows_columns
 
 def is_bbox_overlap(bbox1, bbox2):
     x1_1, y1_1, x2_1, y2_1 = bbox1
