@@ -11,7 +11,7 @@ if utils_dir not in sys.path:
 
 from utils.cv import deskew_image, draw_text_in_center, remove_regions, preProcessing
 from utils.ocr import detectText
-from utils.point import split_rows_columns
+from utils.point import is_same_column, is_same_row, split_rows_columns, getColumnIndex, getRowIndex, is_have_line
 from utils.table import cells_to_html, createHTML
 
 def detect_lines(img_bin, fixkernel, detectkernel):
@@ -34,7 +34,7 @@ def detect_lines(img_bin, fixkernel, detectkernel):
     result = cv2.dilate(image_1, detectkernel, iterations=3)
     return result
 
-def find_Lines(img):
+def find_Lines(img, max_cols=50, max_rows=50):
     """
     Nhận diện cấu trúc bảng trong ảnh.
 
@@ -54,8 +54,8 @@ def find_Lines(img):
     outImag.append((img_bin, 'invert'))
 
     # Giả sử bảng có tối đa 50 dòng và 50 cột
-    kernel_len_ver = img_height // 50
-    kernel_len_hor = img_width // 50
+    kernel_len_ver = img_height // max_rows # Chiều cao của kernel
+    kernel_len_hor = img_width // max_cols # Chiều rộng của kernel
     # Defining a vertical kernel to detect all vertical lines of image
     ver_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_len_ver))
 
@@ -101,8 +101,7 @@ def findCenters(img_bin):
         centers.append((x + w // 2, y + h // 2))
     return centers
 
-
-def create_cells(rows, columns):
+def create_cells(rows, columns, tableMask):
     """
     Tạo các ô bảng từ các điểm giao đã được phân theo hàng và cột.
 
@@ -124,59 +123,57 @@ def create_cells(rows, columns):
     for row_index in range(len(rows)-1):
         for top_left_index in range(len(rows[row_index]) - 1):
             top_left = rows[row_index][top_left_index]
+            top_right = rows[row_index][top_left_index + 1]
+            if not is_have_line(top_left, top_right, tableMask): continue
             # Tìm cột của top_left
-            top_left_col_index = 0
-            for top_left_col_index in range(len(columns)):
-                if abs(columns[top_left_col_index][0][0] - top_left[0]) < 10:
-                    break
+            top_left_col_index = getColumnIndex(top_left, columns)
             # duyệt qua cột vừa tìm được và tìm bottom_left
             lower_left = list(filter(lambda c: c[1] > top_left[1], columns[top_left_col_index]))
             if len(lower_left) == 0: continue
-            bottom_left = lower_left[0]
-            for top_right_index in range(top_left_index + 1, len(rows[row_index])):
-                top_right = rows[row_index][top_right_index]
-                # Tìm cột của top_right
-                top_right_col_index = 0
-                for top_right_col_index in range(len(columns)):
-                    if abs(columns[top_right_col_index][0][0] - top_right[0]) < 10:
+            # bottom_left = lower_left[0]
+            isCorrectBottomLeft = False
+            for bottom_left in lower_left:
+                if not is_have_line(top_left, bottom_left, tableMask): break
+                for top_right_index in range(top_left_index + 1, len(rows[row_index])):
+                    top_right = rows[row_index][top_right_index]
+                    if not is_have_line(top_left, top_right, tableMask): continue
+                    # if not is_have_line(top_left, top_right, tableMask): continue
+                    # Tìm cột của top_right
+                    top_right_col_index = getColumnIndex(top_right, columns)
+                    # duyệt qua cột vừa tìm được và tìm bottom_left
+                    lower_right = list(filter(lambda c: c[1] > top_right[1], columns[top_right_col_index]))
+                    if len(lower_right) == 0: continue
+                    isCorrectBottomRight = False
+                    for bottom_right in lower_right:
+                        if not is_same_row(bottom_left, bottom_right): continue
+                        if not is_have_line(bottom_left, bottom_right, tableMask): continue
+                        if not is_have_line(top_right, bottom_right, tableMask): continue
+                        isCorrectBottomRight = True
+                        isCorrectBottomLeft = True
+                        # Tìm hàng của bottom_right
+                        bottom_right_row_index = getRowIndex(bottom_right, rows)
+                        # Tạo bbox
+                        bbox = (top_left[0], top_left[1], bottom_right[0], bottom_right[1])
+                        # tính row_span và col_span của bbox
+                        row_span = bottom_right_row_index - row_index
+                        col_span = top_right_col_index - top_left_col_index
+                        # Tạo cell
+                        cell = {'bbox': bbox, 'row_span': row_span, 'col_span': col_span, 'row':row_index, 'col':top_left_col_index}
+                        cells.append(cell)
                         break
-                # duyệt qua cột vừa tìm được và tìm bottom_left
-                lower_right = list(filter(lambda c: c[1] > top_right[1], columns[top_right_col_index]))
-                if len(lower_right) == 0: continue
-                bottom_right = lower_right[0]
-                
-                # Xử lý bottom_left và bottom_right không cùng 1 hàng
-                bottom_right = (bottom_right[0], max(bottom_left[1], bottom_right[1]))
-                bottom_left = (bottom_left[0], max(bottom_left[1], bottom_right[1]))
-                # print('top_left',top_left,'top_right', top_right, 'bottom_right', bottom_right)
-
-                # Tìm hàng của bottom_right
-                bottom_right_row_index = 0
-                for bottom_right_row_index in range(len(rows)):
-                    if abs(rows[bottom_right_row_index][0][1] - bottom_right[1]) < 10:
-                        break
-
-                # Tạo bbox
-                bbox =  (top_left[0], top_left[1], bottom_right[0], bottom_right[1])
-                # print(bbox)
-                # tính row_span và col_span của bbox
-                row_span = bottom_right_row_index - row_index
-                col_span = top_right_col_index - top_left_col_index
-                # Tạo cell
-                cell = {'bbox': bbox, 'row_span': row_span, 'col_span': col_span, 'row':row_index, 'col':top_left_col_index}
-                cells.append(cell)
-                break
-                # return cells
+                    if isCorrectBottomRight: break
+                if isCorrectBottomLeft: break
     return cells
 
 
 def draw_cells(img, cells, size = 0.7, color = (0, 0, 255)):
-    img = img.copy()
+    img = np.zeros_like(img)
     for index, cell in enumerate(cells, start=1):
         x1, y1, x2, y2 = cell['bbox']
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 1)
+        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 60, 255), 1)
         draw_text_in_center(img, f"{cell['row_span']}x{cell['col_span']}", cell['bbox'], size, color)
-        # cv2.circle(img, center, 5, (255, 0, 255), -1)
+        # center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
+        # cv2.circle(img, (center), 5, (255, 0, 255), -1)
     return img
 
 
@@ -187,9 +184,9 @@ def recognize(image_path, detector, useBase64=False):
     mask, dots, outImag = find_Lines(image_ok)
     image_removed = remove_regions(image_ok, mask)
     centers = findCenters(dots)
-    rows = split_rows_columns(centers, mode='row')
-    columns = split_rows_columns(centers, mode='column')
-    cells = create_cells(rows, columns)
+    rows = split_rows_columns(centers, modeName='row')
+    columns = split_rows_columns(centers, modeName='column')
+    cells = create_cells(rows, columns, mask)
     cells_imgs = []
     for cell in cells:
         x1,y1,x2,y2 = cell['bbox']
