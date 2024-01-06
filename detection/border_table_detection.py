@@ -9,7 +9,7 @@ utils_dir = os.path.join(current_dir, '..', 'utils')
 if utils_dir not in sys.path:
     sys.path.append(utils_dir)
 
-from utils.cv import deskew_image, draw_text_in_center, find_Lines, remove_regions, preProcessing
+from utils.cv import deskew_image, draw_text_in_center, find_Lines, remove_regions, preProcessing, trim_white
 from utils.ocr import detectText
 from utils.point import is_same_column, is_same_row, split_rows_columns, getColumnIndex, getRowIndex, is_have_line
 from utils.table import cells_to_html, createHTML
@@ -138,9 +138,10 @@ def imgPath_to_cells(image_path):
     return img_to_cells(image)
 
 def img_to_cells(image):
-    image_ok, calc_angle = deskew_image(image)
+    image_deskew, _ = deskew_image(image)
+    image_ok = trim_white(image_deskew)
     _, image_pre, _ = preProcessing(image_ok)
-    mask, dots, outImag = find_Lines(image_pre)
+    mask, dots, _ = find_Lines(image_pre)
     image_removed = remove_regions(image_pre, mask)
     centers = findCenters(dots)
     rows = split_rows_columns(centers, modeName='row')
