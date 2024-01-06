@@ -250,7 +250,7 @@ def cut_text_line(image):
     _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
     dilated = cv2.dilate(bw, kernel, iterations=10) # mở rộng để lấp đầy hàng
-    erode = cv2.erode(dilated, kernel, iterations=8) # thu hẹp lại
+    erode = cv2.erode(dilated, kernel, iterations=5) # thu hẹp lại
     contours, _ = cv2.findContours(erode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     images = []
     # img_cnt = image.copy()

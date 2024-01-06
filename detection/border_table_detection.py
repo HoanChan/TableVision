@@ -138,10 +138,10 @@ def imgPath_to_cells(image_path):
     return img_to_cells(image)
 
 def img_to_cells(image):
-    _, image, _ = preProcessing(image)
     image_ok, calc_angle = deskew_image(image)
-    mask, dots, outImag = find_Lines(image_ok)
-    image_removed = remove_regions(image_ok, mask)
+    _, image_pre, _ = preProcessing(image_ok)
+    mask, dots, outImag = find_Lines(image_pre)
+    image_removed = remove_regions(image_pre, mask)
     centers = findCenters(dots)
     rows = split_rows_columns(centers, modeName='row')
     columns = split_rows_columns(centers, modeName='column')
