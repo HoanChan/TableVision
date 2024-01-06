@@ -1,6 +1,8 @@
 import os
 import sys
 
+from cv2 import dilate, erode
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 utils_dir = os.path.join(current_dir, '..', 'utils')
 if utils_dir not in sys.path:
@@ -66,8 +68,8 @@ def explain_bboxs_by_column(bboxs, image, row_threshold = 20):
             checker[i] = True
     return bboxs
 
-def explain_bboxs_by_space(bboxs, image, row_threshold = 20, col_threshold = 20):
-    width, height = image.shape[:2]
+def explain_bboxs_by_space(bboxs, image, row_threshold = 10, col_threshold = 10):
+    height, width = image.shape[:2] # height, width, channels = image.shape
     # tìm tất cả bbox mà không có bbox nào ở bên phải và cùng hàng với nó rồi mở rộng nó, nếu có thể thì mở rộng về cả 2 phía luôn
     no_right_bboxs = [box for box in bboxs if len([box2 for box2 in bboxs if isSameRow(box, box2, overlap_percent=0) and box2[0] > box[2]]) == 0]
     for index in range(len(bboxs)):
@@ -95,7 +97,7 @@ def explain_bboxs_by_space(bboxs, image, row_threshold = 20, col_threshold = 20)
     no_bottom_bboxs = [box for box in bboxs if len([box2 for box2 in bboxs if isSameCol(box, box2) and box2[1] > box[3]]) == 0]
     for index in range(len(bboxs)):
         if bboxs[index] in no_bottom_bboxs:
-            bboxs[index] = create_bbox([bboxs[index], (bboxs[index][0], bboxs[index][1], bboxs[index][2], height - col_threshold*2)])
+            bboxs[index] = create_bbox([bboxs[index], (bboxs[index][0], bboxs[index][1], bboxs[index][2], height - col_threshold)])
     # tìm tất cả các bbox có các bbox cùng cột nằm cách xa nó 1 khoảng lớn hơn ngưỡng rồi mở rộng nó
     bottom_bboxs = [(box, min_with_default([box2[1] for box2 in bboxs if isSameCol(box, box2) and box2[1] > box[3]])) for box in bboxs]
     far_bottom_bboxs = [(box, min) for box, min in bottom_bboxs if min > box[3] + col_threshold * 2]
@@ -140,14 +142,21 @@ def find_Cells(image):
         return [], [], image, outImag
     img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     thresh, img_bin = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)# THRESH_OTSU là phương pháp tự động xác định ngưỡng dựa trên histogram của ảnh
+    # # Loại bỏ nhiễu còn sót
+    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    # # img_bin = cv2.morphologyEx(img_bin, cv2.MORPH_CLOSE, kernel, iterations=1)
+    # img_bin = erode(img_bin, kernel, iterations=1)
+    # img_bin = dilate(img_bin, kernel, iterations=1)
+    # outImag.append((img_bin, 'morphologyEx'))
 
     # Connect letters that are connected only by a few pixels
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 1))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 1))
     img_connect = cv2.dilate(img_bin, kernel, iterations=3)
+    img_connect = cv2.erode(img_connect, kernel, iterations=3)
     outImag.append((img_connect, 'connect_letters'))
 
     # loại bỏ nhiễu
-    img_bold = cv2.medianBlur(img_connect, 11)
+    img_bold = cv2.medianBlur(img_connect, 5)
     outImag.append((img_bold, 'medianBlur'))
 
     # Xác định các contours
@@ -285,20 +294,13 @@ def createCell_img(cells, image):
     return cells_imgs
 
 def recognize(image_path, detector, useBase64=False): 
-    image = cv2.imread(image_path)
-    image_deskew, calc_angle = deskew_image(image)
-    image_ok = trim_white(image_deskew)
-    mask, _, _ = find_Lines(image_ok)
-    image_removed = remove_regions(image_ok, mask)
-    _, image_pre = preProcessing(image_removed)
-    bboxs, mask, _ = find_Cells(image_pre)
-    boxs = bboxs
-    cols = split_box_rows_columns(boxs, mode = 'col')       
-    rows = split_box_rows_columns(boxs, mode = 'row')
-    box_indexs = [getbox_index(box, rows, cols) for box in boxs]
-    boxs, rows, cols, box_indexs = add_missing_cells(boxs, rows, cols, box_indexs)
-    matrix = createSpanMatrix(rows, cols, box_indexs, bboxs)
-    cells = createCells(boxs, box_indexs, matrix)
+    cells, image_removed = imgPath_to_cells(image_path)
+    cells = add_text_to_cell(cells, image_removed, detector)
+    html = cells_to_html(cells).replace('<thead>','<tr>').replace('</thead>','</tr>').replace('\n',"<br>")
+    new_html = createHTML(image_path, html, show_image=True, useBase64=useBase64)
+    return new_html
+
+def add_text_to_cell(cells, image_removed, detector):
     cells_imgs = createCell_img(cells, image_removed)
     texts = []
     for cell in cells_imgs:
@@ -307,6 +309,23 @@ def recognize(image_path, detector, useBase64=False):
       texts += [text]
     for i in range(len(cells)):
       cells[i]['cell text'] =  texts[i]
-    html = cells_to_html(cells).replace('<thead>','<tr>').replace('</thead>','</tr>').replace('\n',"<br>")
-    new_html = createHTML(image_path, html, show_image=True, useBase64=useBase64)
-    return new_html
+    return cells
+
+def imgPath_to_cells(image_path):
+    image = cv2.imread(image_path)
+    return img_to_cells(image)
+
+def img_to_cells(image):
+    image_deskew, _ = deskew_image(image)
+    image_ok = trim_white(image_deskew)
+    mask, _, _ = find_Lines(image_ok)
+    image_removed = remove_regions(image_ok, mask)
+    _, image_pre, _ = preProcessing(image_removed)
+    boxs, _, _ = find_Cells(image_pre)
+    cols = split_box_rows_columns(boxs, mode = 'col')       
+    rows = split_box_rows_columns(boxs, mode = 'row')
+    box_indexs = [getbox_index(box, rows, cols) for box in boxs]
+    boxs, rows, cols, box_indexs = add_missing_cells(boxs, rows, cols, box_indexs)
+    matrix = createSpanMatrix(rows, cols, box_indexs, boxs)
+    cells = createCells(boxs, box_indexs, matrix)
+    return cells, image_removed

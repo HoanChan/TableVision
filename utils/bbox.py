@@ -110,3 +110,6 @@ def split_box_rows_columns(bboxs, mode='row'):
     for row_column in rows_columns:
         row_column.sort(key=lambda c: c[1-mode])
     return rows_columns
+
+def get_scale_bbox(box, scale):
+    return (int(box[0] * scale), int(box[1] * scale), int(box[2] * scale), int(box[3] * scale)) 

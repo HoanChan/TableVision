@@ -9,78 +9,10 @@ utils_dir = os.path.join(current_dir, '..', 'utils')
 if utils_dir not in sys.path:
     sys.path.append(utils_dir)
 
-from utils.cv import deskew_image, draw_text_in_center, remove_regions, preProcessing
+from utils.cv import deskew_image, draw_text_in_center, find_Lines, remove_regions, preProcessing
 from utils.ocr import detectText
 from utils.point import is_same_column, is_same_row, split_rows_columns, getColumnIndex, getRowIndex, is_have_line
 from utils.table import cells_to_html, createHTML
-
-def detect_lines(img_bin, fixkernel, detectkernel):
-    """
-    Phát hiện các đường thẳng trong ảnh bằng cách sử dụng các kernel được chỉ định.
-    Cụ thể, ảnh được lấp đầy các khoảng trống với fixkernel.
-    Sau đó loại bỏ các thành phần không phải đường thẳng với detectkernel.
-    Cuối cùng là phục hồi lại như cũ với detectkernel.
-
-    Tham số:
-    - img_bin: Ảnh nhị phân.
-    - fixkernel: Kernel được sử dụng để dilate (Bồi đắp các pixel màu trắng) để sửa lỗi.
-    - detectkernel: Kernel được sử dụng để erode (Bào mòn các pixel màu trắng) và dilate nhằm giữ lại các đường.
-
-    Kết quả:
-    - result: Ảnh sau khi phát hiện các đường thẳng.
-    """
-    image_0 = cv2.dilate(img_bin, fixkernel, iterations=2)
-    image_1 = cv2.erode(image_0, detectkernel, iterations=3)
-    result = cv2.dilate(image_1, detectkernel, iterations=3)
-    return result
-
-def find_Lines(img, max_cols=50, max_rows=50):
-    """
-    Nhận diện cấu trúc bảng trong ảnh.
-
-    Tham số:
-    - img: Ảnh cần nhận diện cấu trúc.
-
-    Kết quả:
-    - img_vh: Ảnh chứa thông tin về các đường kẻ dọc và ngang (mask).
-    - img_sub: Ảnh chứa thông tin các điểm giao nhau của các đường dọc và ngang.
-    - outImag: Danh sách các ảnh trung gian.
-    """    
-    outImag=[]
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    img_height, img_width = img.shape
-    # THRESH_OTSU là phương pháp tự động xác định ngưỡng dựa trên histogram của ảnh
-    thresh, img_bin = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-    outImag.append((img_bin, 'invert'))
-
-    # Giả sử bảng có tối đa 50 dòng và 50 cột
-    kernel_len_ver = img_height // max_rows # Chiều cao của kernel
-    kernel_len_hor = img_width // max_cols # Chiều rộng của kernel
-    # Defining a vertical kernel to detect all vertical lines of image
-    ver_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_len_ver))
-
-    # Defining a horizontal kernel to detect all horizontal lines of image
-    hor_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_len_hor, 1))
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-
-    vertical_lines = detect_lines(img_bin, kernel, ver_kernel)
-    outImag.append((vertical_lines, 'vertical_lines'))
-
-    horizontal_lines = detect_lines(img_bin, kernel, hor_kernel)
-    outImag.append((horizontal_lines, 'horizontal_lines'))
-
-    img_vh = cv2.bitwise_or(vertical_lines, horizontal_lines)
-    outImag.append((img_vh, 'Combine'))
-
-    img_vh = cv2.dilate(img_vh, kernel, iterations=1)
-    outImag.append((img_vh, 'Dilated - Mask Result'))
-
-    img_sub = cv2.bitwise_and(vertical_lines, horizontal_lines)
-    outImag.append((img_sub, 'Subtraction - Point Result'))
-
-    return img_vh, img_sub, outImag
-
 
 def findCenters(img_bin):
     """
@@ -178,15 +110,13 @@ def draw_cells(img, cells, size = 0.7, color = (0, 0, 255)):
 
 
 def recognize(image_path, detector, useBase64=False):
-    image = cv2.imread(image_path)
-    _, image = preProcessing(image)
-    image_ok, calc_angle = deskew_image(image)
-    mask, dots, outImag = find_Lines(image_ok)
-    image_removed = remove_regions(image_ok, mask)
-    centers = findCenters(dots)
-    rows = split_rows_columns(centers, modeName='row')
-    columns = split_rows_columns(centers, modeName='column')
-    cells = create_cells(rows, columns, mask)
+    cells, image_removed = imgPath_to_cells(image_path)
+    cells = add_text_to_cell(cells, image_removed, detector)
+    html = cells_to_html(cells).replace('<thead>','<tr>').replace('</thead>','</tr>').replace('\n',"<br>")
+    new_html = createHTML(image_path, html, show_image=True, useBase64=useBase64)
+    return new_html
+    
+def add_text_to_cell(cells, image_removed, detector):
     cells_imgs = []
     for cell in cells:
         x1,y1,x2,y2 = cell['bbox']
@@ -201,6 +131,19 @@ def recognize(image_path, detector, useBase64=False):
     cells_imgs = []
     for i in range(len(cells)):
         cells[i]['cell text'] = texts[i]
-    html = cells_to_html(cells).replace('<thead>','<tr>').replace('</thead>','</tr>').replace('\n',"<br>")
-    new_html = createHTML(image_path, html, show_image=True, useBase64=useBase64)
-    return new_html
+    return cells
+
+def imgPath_to_cells(image_path):
+    image = cv2.imread(image_path)
+    return img_to_cells(image)
+
+def img_to_cells(image):
+    _, image, _ = preProcessing(image)
+    image_ok, calc_angle = deskew_image(image)
+    mask, dots, outImag = find_Lines(image_ok)
+    image_removed = remove_regions(image_ok, mask)
+    centers = findCenters(dots)
+    rows = split_rows_columns(centers, modeName='row')
+    columns = split_rows_columns(centers, modeName='column')
+    cells = create_cells(rows, columns, mask)
+    return cells, image_removed

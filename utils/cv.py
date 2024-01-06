@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-from utils import bbox
 from utils.bbox import is_bbox_inside, split_box_rows_columns, create_bbox
 
 def display_images_with_labels(image_labels, layout, size=(10, 10), show_axis=True):
@@ -41,7 +40,7 @@ def display_images_with_labels(image_labels, layout, size=(10, 10), show_axis=Tr
     plt.tight_layout()
     plt.show()
 
-def preProcessing(image, minRecSize = 5000):    
+def preProcessing(image, minRecSize = 50000):    
     """
     Tiền xử lý ảnh.
     
@@ -54,18 +53,15 @@ def preProcessing(image, minRecSize = 5000):
     - result: Ảnh đã tiền xử lý.
     """
     data = []
-    # # resize về chiều nhỏ nhất là 1000
-    # w,h = image.shape[:2]
-    # if w < h:
-    #     scale_percent = 2000 / image.shape[0]
-    # else:
-    #     scale_percent = 2000 / image.shape[1]
-    # width = int(image.shape[1] * scale_percent)
-    # height = int(image.shape[0] * scale_percent)
-    # image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
-    data+=[(image,'original')]
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    data+=[(gray,'gray')]
+    data+=[(image,'original')]  
+    # resize sao cho chiều cao mỗi dòng chữ là 50px    
+    text_height, _ = get_text_height(image)
+    height_ratio = 50 / text_height
+    new_width = int(image.shape[1] * height_ratio)
+    new_height = int(image.shape[0] * height_ratio)
+    image_new = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+    data+=[(image_new,'resize')]    
+    gray = cv2.cvtColor(image_new, cv2.COLOR_BGR2GRAY)
     # Áp dụng ngưỡng
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     data+=[(binary,'binary')]
@@ -104,8 +100,8 @@ def preProcessing(image, minRecSize = 5000):
     # for box in bboxs:
     #     x1, y1, x2, y2 = box
     #     cv2.rectangle(result, (x1, y1), (x2, y2), (0, 255, 0), 3)
-    data+=[(result,'image')]
-    return data, result
+    data+=[(result,'image')]  
+    return data, result, height_ratio
 
 def deskew_image(image):
     """
@@ -254,15 +250,15 @@ def cut_text_line(image):
     _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
     dilated = cv2.dilate(bw, kernel, iterations=10) # mở rộng để lấp đầy hàng
-    # return [dilated]
-    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    erode = cv2.erode(dilated, kernel, iterations=8) # thu hẹp lại
+    contours, _ = cv2.findContours(erode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     images = []
     # img_cnt = image.copy()
     bboxs=[]
     for cnt in contours:
         area = cv2.contourArea(cnt)
         x, y, w, h = cv2.boundingRect(cnt)
-        if area > 100 and w > h and h > 5:
+        if area > 100 and w > h and h > 10:
             bboxs.append((x,y,x+w,y+h))
     if len(bboxs) == 0:
         return []
@@ -276,7 +272,7 @@ def cut_text_line(image):
         else:
             box = row[0]
         x1,y1,x2,y2 = box
-        cropped = image[y1-3:y2+3, x1:x2]
+        cropped = image[y1:y2, x1:x2]
         images+=[cropped]
     if len(images) == 0:
         return []
@@ -303,3 +299,117 @@ def draw_rows_columns(img, rows, columns):
     for column in columns:
         cv2.line(img, column[0], column[-1], (255, 0, 255), 3)
     return img
+
+
+def detect_lines(img_bin, fixkernel, detectkernel):
+    """
+    Phát hiện các đường thẳng trong ảnh bằng cách sử dụng các kernel được chỉ định.
+    Cụ thể, ảnh được lấp đầy các khoảng trống với fixkernel.
+    Sau đó loại bỏ các thành phần không phải đường thẳng với detectkernel.
+    Cuối cùng là phục hồi lại như cũ với detectkernel.
+
+    Tham số:
+    - img_bin: Ảnh nhị phân.
+    - fixkernel: Kernel được sử dụng để dilate (Bồi đắp các pixel màu trắng) để sửa lỗi.
+    - detectkernel: Kernel được sử dụng để erode (Bào mòn các pixel màu trắng) và dilate nhằm giữ lại các đường.
+
+    Kết quả:
+    - result: Ảnh sau khi phát hiện các đường thẳng.
+    """
+    image_0 = cv2.dilate(img_bin, fixkernel, iterations=2)
+    image_1 = cv2.erode(image_0, detectkernel, iterations=3)
+    result = cv2.dilate(image_1, detectkernel, iterations=3)
+    return result
+
+def find_Lines(img, max_cols=50, max_rows=50):
+    """
+    Nhận diện cấu trúc bảng trong ảnh.
+
+    Tham số:
+    - img: Ảnh cần nhận diện cấu trúc.
+
+    Kết quả:
+    - img_vh: Ảnh chứa thông tin về các đường kẻ dọc và ngang (mask).
+    - img_sub: Ảnh chứa thông tin các điểm giao nhau của các đường dọc và ngang.
+    - outImag: Danh sách các ảnh trung gian.
+    """    
+    outImag=[]
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_height, img_width = img.shape
+    # THRESH_OTSU là phương pháp tự động xác định ngưỡng dựa trên histogram của ảnh
+    thresh, img_bin = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    outImag.append((img_bin, 'invert'))
+
+    # Giả sử bảng có tối đa 50 dòng và 50 cột
+    kernel_len_ver = img_height // max_rows # Chiều cao của kernel
+    kernel_len_hor = img_width // max_cols # Chiều rộng của kernel
+    # Defining a vertical kernel to detect all vertical lines of image
+    ver_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_len_ver))
+
+    # Defining a horizontal kernel to detect all horizontal lines of image
+    hor_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_len_hor, 1))
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+
+    vertical_lines = detect_lines(img_bin, kernel, ver_kernel)
+    outImag.append((vertical_lines, 'vertical_lines'))
+
+    horizontal_lines = detect_lines(img_bin, kernel, hor_kernel)
+    outImag.append((horizontal_lines, 'horizontal_lines'))
+
+    img_vh = cv2.bitwise_or(vertical_lines, horizontal_lines)
+    outImag.append((img_vh, 'Combine'))
+
+    img_vh = cv2.dilate(img_vh, kernel, iterations=1)
+    outImag.append((img_vh, 'Dilated - Mask Result'))
+
+    img_sub = cv2.bitwise_and(vertical_lines, horizontal_lines)
+    outImag.append((img_sub, 'Subtraction - Point Result'))
+
+    return img_vh, img_sub, outImag
+
+
+def get_text_height(img):
+    outImag = []
+    outImag.append((img, 'original'))
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    width, height = gray.shape
+    # Áp dụng ngưỡng
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)    
+    # chuyển sang ảnh màu
+    bin = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+    mask, dots, outImag = find_Lines(bin , max_cols=20, max_rows=20)
+    image_removed = remove_regions(bin, mask)
+    image_removed = cv2.cvtColor(image_removed, cv2.COLOR_BGR2GRAY)
+    outImag.append((image_removed, 'remove_regions'))
+    # lọc nhiễu
+    image_median = cv2.medianBlur(~image_removed, 5)
+    outImag.append((image_median, 'medianBlur'))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    dilate = cv2.dilate(image_median, kernel, iterations=1)
+    outImag.append((dilate, 'dilate'))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (width * 10, 1))
+    line_img = cv2.dilate(dilate, kernel, iterations=1)
+    outImag.append((line_img, 'lines'))
+
+    # tìm contours của tất cả vùnqg trắng
+    contours, hierarchy = cv2.findContours(line_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # chuyển sang bbox
+    bboxes = [cv2.boundingRect(cnt) for cnt in contours]
+    # sắp xếp theo chiều cao
+    bboxes = sorted(bboxes, key=lambda x: x[3])
+    # bỏ bbox có chiều cao nhỏ hơn 5
+    bboxes = [box for box in bboxes if box[3] > 5]  
+    if len(bboxes) == 0:
+        return 5, outImag
+    # while len(bboxes) > 3:
+    #     bboxes = sorted(bboxes, key=lambda x: x[3])
+    #     # bỏ phần tử đầu và cuối
+    #     bboxes = bboxes[1:-1]
+    mid_box = bboxes[len(bboxes) // 2]  # lấy bbox ở giữa
+    x, y, w, h = mid_box
+    tmp_img = img.copy()
+    cv2.rectangle(tmp_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
+    outImag.append((tmp_img, 'final'))
+    return h, outImag
