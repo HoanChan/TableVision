@@ -93,7 +93,7 @@ def cells_to_xlsx(cells, path = "data.xlsx"):
         rowspan = cell['row_span']
         colspan = cell['col_span']
         text = cell['cell text']
-        print(f'row: {row}, column: {column}, rowspan: {rowspan}, colspan: {colspan}')
+        # print(f'row: {row}, column: {column}, rowspan: {rowspan}, colspan: {colspan}')
 
         # Đặt giá trị cho ô
         top_left_cell = sheet.cell(row=row, column=column)
