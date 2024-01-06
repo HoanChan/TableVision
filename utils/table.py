@@ -1,6 +1,11 @@
 import xml.etree.ElementTree as ET
 import base64
 
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
+
 def cells_to_html(cells):
 
     table = ET.Element("table")
@@ -75,3 +80,38 @@ def createHTML(image_path, html, show_image = True, useBase64 = False):
     """ if show_image else html
     new_html = '<head><style>'+ css +'</style></head><body>'+ body + '</body>'
     return new_html
+
+def cells_to_xlsx(cells, path = "data.xlsx"):
+    # Tạo một Workbook mới
+    wb = Workbook()
+    sheet = wb.active
+
+    # Đặt giá trị và gộp ô cho mỗi phần tử trong data
+    for cell in cells:
+        row = cell['row'] + 1
+        column = cell['col'] + 1
+        rowspan = cell['row_span']
+        colspan = cell['col_span']
+        text = cell['cell text']
+        print(f'row: {row}, column: {column}, rowspan: {rowspan}, colspan: {colspan}')
+
+        # Đặt giá trị cho ô
+        top_left_cell = sheet.cell(row=row, column=column)
+        top_left_cell.value = text
+        top_left_cell.alignment = Alignment(horizontal='center',    # Căn giữa theo chiều ngang
+                                            vertical='center',      # Căn giữa theo chiều dọc
+                                            wrap_text=True)         # Tự động xuống dòng khi text quá dài
+
+        # Gộp ô nếu rowspan hoặc colspan lớn hơn 1
+        if rowspan > 1 or colspan > 1:
+            merge_range = '{}{}:{}{}'.format(
+                get_column_letter(column),
+                row,
+                get_column_letter(column + colspan - 1),
+                row + rowspan - 1
+            )
+            sheet.merge_cells(merge_range)
+            print(f'Merged {merge_range}')
+
+    wb.save(path)
+    print(f'Saved to {path}')
