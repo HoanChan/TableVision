@@ -318,10 +318,10 @@ def imgPath_to_cells(image_path):
 def img_to_cells(image):
     image_deskew, _ = deskew_image(image)
     image_ok = trim_white(image_deskew)
-    mask, _, _ = find_Lines(image_ok)
-    image_removed = remove_regions(image_ok, mask)
-    _, image_pre, _ = preProcessing(image_removed)
-    boxs, _, _ = find_Cells(image_pre)
+    _, image_pre, _ = preProcessing(image_ok)
+    mask, _, _ = find_Lines(image_pre)
+    image_removed = remove_regions(image_pre, mask)
+    boxs, _, _ = find_Cells(image_removed)
     cols = split_box_rows_columns(boxs, mode = 'col')       
     rows = split_box_rows_columns(boxs, mode = 'row')
     box_indexs = [getbox_index(box, rows, cols) for box in boxs]
